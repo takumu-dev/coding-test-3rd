@@ -27,16 +27,30 @@ class VectorStore:
     
     def _initialize_embeddings(self):
         """Initialize embedding model"""
-        if settings.OPENAI_API_KEY:
+        # Try Gemini embeddings first
+        if hasattr(settings, 'GOOGLE_API_KEY') and settings.GOOGLE_API_KEY:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            return GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=settings.GOOGLE_API_KEY
+            )
+        elif settings.OPENAI_API_KEY:
             return OpenAIEmbeddings(
                 model=settings.OPENAI_EMBEDDING_MODEL,
                 openai_api_key=settings.OPENAI_API_KEY
             )
         else:
-            # Fallback to local embeddings
-            return HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
-            )
+            # Fallback to local embeddings (requires sentence-transformers)
+            try:
+                return HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
+            except ImportError:
+                raise ImportError(
+                    "No API key configured and sentence-transformers not installed. "
+                    "Please set GOOGLE_API_KEY or OPENAI_API_KEY in .env, or install sentence-transformers: "
+                    "pip install sentence-transformers"
+                )
     
     def _ensure_extension(self):
         """
@@ -52,25 +66,26 @@ class VectorStore:
             
             # Create embeddings table
             # Dimension: 1536 for OpenAI, 384 for sentence-transformers
-            dimension = 1536 if settings.OPENAI_API_KEY else 384
+            dimension = 1536 if settings.OPENAI_API_KEY else 768  # Create embeddings table if not exists (768 dimensions for Gemini embeddings)
+            create_table_sql = text("""
+                CREATE TABLE IF NOT EXISTS document_embeddings (
+                    id SERIAL PRIMARY KEY,
+                    document_id INTEGER,
+                    fund_id INTEGER,
+                    content TEXT NOT NULL,
+                    embedding vector(768),
+                    metadata JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+                    FOREIGN KEY (fund_id) REFERENCES funds(id) ON DELETE CASCADE
+                );
+                
+                CREATE INDEX IF NOT EXISTS document_embeddings_embedding_idx 
+                ON document_embeddings USING ivfflat (embedding vector_cosine_ops)
+                WITH (lists = 100);
+            """)
             
-            create_table_sql = f"""
-            CREATE TABLE IF NOT EXISTS document_embeddings (
-                id SERIAL PRIMARY KEY,
-                document_id INTEGER,
-                fund_id INTEGER,
-                content TEXT NOT NULL,
-                embedding vector({dimension}),
-                metadata JSONB,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            
-            CREATE INDEX IF NOT EXISTS document_embeddings_embedding_idx 
-            ON document_embeddings USING ivfflat (embedding vector_cosine_ops)
-            WITH (lists = 100);
-            """
-            
-            self.db.execute(text(create_table_sql))
+            self.db.execute(create_table_sql)
             self.db.commit()
         except Exception as e:
             print(f"Error ensuring pgvector extension: {e}")
@@ -88,22 +103,33 @@ class VectorStore:
         try:
             # Generate embedding
             embedding = await self._get_embedding(content)
-            embedding_list = embedding.tolist()
+            embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
             
-            # Insert into database
-            insert_sql = text("""
+            # Format embedding as PostgreSQL array string
+            embedding_str = '[' + ','.join(map(str, embedding_list)) + ']'
+            
+            # Convert metadata to JSON string
+            import json
+            metadata_json = json.dumps(metadata)
+            
+            # Insert into database using raw SQL with proper psycopg2 binding
+            insert_sql = """
                 INSERT INTO document_embeddings (document_id, fund_id, content, embedding, metadata)
-                VALUES (:document_id, :fund_id, :content, :embedding::vector, :metadata::jsonb)
-            """)
+                VALUES (%(document_id)s, %(fund_id)s, %(content)s, %(embedding)s::vector, %(metadata)s::jsonb)
+            """
             
-            self.db.execute(insert_sql, {
+            # Use raw connection for proper parameter binding
+            conn = self.db.connection().connection
+            cursor = conn.cursor()
+            cursor.execute(insert_sql, {
                 "document_id": metadata.get("document_id"),
                 "fund_id": metadata.get("fund_id"),
                 "content": content,
-                "embedding": str(embedding_list),
-                "metadata": str(metadata)
+                "embedding": embedding_str,
+                "metadata": metadata_json
             })
-            self.db.commit()
+            conn.commit()
+            cursor.close()
         except Exception as e:
             print(f"Error adding document: {e}")
             self.db.rollback()

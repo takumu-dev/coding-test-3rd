@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /code
 
 # Install system dependencies in one layer and clean up immediately
 RUN apt-get update && \
@@ -17,10 +17,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY . /code
 
 # Create necessary directories
-RUN mkdir -p /app/uploads /app/vector_store /app/faiss_index
+RUN mkdir -p /code/uploads /code/vector_store /code/faiss_index
+
+# Set Python path
+ENV PYTHONPATH=/code
 
 # Expose port
 EXPOSE 8000

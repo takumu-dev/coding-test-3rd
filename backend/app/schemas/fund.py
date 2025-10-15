@@ -41,7 +41,7 @@ class FundMetrics(BaseModel):
 class Fund(FundBase):
     """Fund response schema"""
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     metrics: Optional[FundMetrics] = None
     
     class Config:

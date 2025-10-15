@@ -23,7 +23,16 @@ class QueryEngine:
     
     def _initialize_llm(self):
         """Initialize LLM"""
-        if settings.OPENAI_API_KEY:
+        # Try Gemini first if available
+        if hasattr(settings, 'GOOGLE_API_KEY') and settings.GOOGLE_API_KEY:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            return ChatGoogleGenerativeAI(
+                model="gemini-pro-latest",
+                google_api_key=settings.GOOGLE_API_KEY,
+                temperature=0,
+                convert_system_message_to_human=True
+            )
+        elif settings.OPENAI_API_KEY:
             return ChatOpenAI(
                 model=settings.OPENAI_MODEL,
                 temperature=0,

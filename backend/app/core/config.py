@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Anthropic (optional)
     ANTHROPIC_API_KEY: str = ""
     
+    # Google Gemini (optional)
+    GOOGLE_API_KEY: str = ""
+    
     # Vector Store
     VECTOR_STORE_PATH: str = "./vector_store"
     FAISS_INDEX_PATH: str = "./faiss_index"

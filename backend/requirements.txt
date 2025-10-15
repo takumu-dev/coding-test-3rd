@@ -23,14 +23,16 @@ pypdf==3.17.4
 langchain==0.1.0
 langchain-openai==0.0.2
 langchain-community==0.0.10
+langchain-google-genai==0.0.5
 openai==1.7.2
 anthropic==0.8.1
 
 # Vector Store (using pgvector - PostgreSQL extension)
 # No additional packages needed - pgvector is a PostgreSQL extension
 
-# Embeddings
-sentence-transformers==2.2.2
+# Embeddings (Optional - only needed if not using OpenAI embeddings)
+# sentence-transformers==2.2.2  # COMMENTED OUT - Too large for Docker build
+# Use OpenAI embeddings instead or install locally if needed
 
 # Task Queue
 celery==5.3.4

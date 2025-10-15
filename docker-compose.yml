@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: fundpass
       POSTGRES_DB: funddb
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init_pgvector.sql:/docker-entrypoint-initdb.d/init_pgvector.sql
@@ -45,10 +45,12 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4-turbo-preview}
       - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      - UPLOAD_DIR=/app/uploads
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - UPLOAD_DIR=/code/uploads
+      - PYTHONPATH=/code
     volumes:
-      - ./backend:/app
-      - backend_uploads:/app/uploads
+      - ./backend:/code
+      - backend_uploads:/code/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +68,7 @@ services:
       dockerfile: Dockerfile
     container_name: fund-frontend
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     volumes:
